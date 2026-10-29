@@ -113,3 +113,46 @@ describe("extractEvent", () => {
     ).rejects.toThrow(/didn't fit the expected shape/);
   });
 });
+
+describe("wrapped answers", () => {
+  it("unwraps an answer the model put inside a list", async () => {
+    const payload = {
+      person: { name: "Nisha" },
+      title: "Thesis defence",
+      date: "2026-12-03",
+      recurring: false,
+      kind: "MILESTONE",
+      details: [],
+      noteWorthy: ["loves dark chocolate"],
+      confidence: 0.9,
+      missing: [],
+      followUpQuestion: null,
+    };
+    const { data, attempts } = await extractEvent(provider(JSON.stringify([payload])), {
+      message: "Nisha defends her thesis on 3rd December",
+      today: TODAY,
+    });
+    expect(attempts).toBe(1);
+    expect(data.person.name).toBe("Nisha");
+  });
+
+  it("unwraps a single-key envelope", async () => {
+    const payload = {
+      person: { name: "Sam" },
+      title: "Call Sam",
+      date: "2026-11-07",
+      recurring: false,
+      kind: "CATCHUP",
+      details: [],
+      noteWorthy: [],
+      confidence: 0.8,
+      missing: [],
+      followUpQuestion: null,
+    };
+    const { data } = await extractEvent(provider(JSON.stringify({ result: payload })), {
+      message: "call Sam on the 7th",
+      today: TODAY,
+    });
+    expect(data.title).toBe("Call Sam");
+  });
+});

@@ -60,7 +60,7 @@ Rules, in order of importance:
 6. Do not repeat the same thing as both an event and a loop. Prefer the event if it has a date.
 7. "confidence" is 0 to 1.
 
-Answer with JSON only, in this shape:
+Answer with one JSON object, never a list, and no text around it. This exact shape:
 {"events":[{"personName":"","title":"","date":null,"dateText":null,"recurring":false,"kind":"OTHER","details":[],"quote":"","messageId":"","confidence":0.0}],"loops":[{"personName":"","text":"","direction":"I_OWE","dueDate":null,"dueText":null,"quote":"","messageId":"","confidence":0.0}]}`;
 
 export type BridgeMessage = { id: string; isMe: boolean; text: string; at: Date };
@@ -85,7 +85,7 @@ export async function extractSignals(
     user,
     schema: extractedSignals,
     temperature: 0.2,
-    maxTokens: 1200,
+    maxTokens: 3500,
   });
 }
 

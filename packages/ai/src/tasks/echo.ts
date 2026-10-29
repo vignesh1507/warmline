@@ -42,6 +42,6 @@ export async function echo(
     user,
     schema: echoResult,
     temperature: 0.3,
-    maxTokens: 300,
+    maxTokens: 1200,
   });
 }

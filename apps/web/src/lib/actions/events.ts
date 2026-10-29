@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma, type EventKind, type Source } from "@warmline/db";
 import { nextOccurrence, parseISODate, reminderDueAt, startOfDay } from "@warmline/shared";
 import { requireUser } from "@/lib/session";
@@ -190,4 +191,47 @@ export async function rollRecurringEvents(userId: string): Promise<void> {
       event.reminders.map((r) => r.offsetDays),
     );
   }
+}
+
+/**
+ * Adding an event by hand.
+ *
+ * The brief asks for "a simple chat or form", and the form matters more than it
+ * looks: it is the only way in when Gemma is unconfigured, rate-limited or
+ * simply wrong, and some things are quicker to type into four boxes than to
+ * explain in a sentence.
+ */
+export async function createEventFromForm(formData: FormData): Promise<void> {
+  const user = await requireUser();
+
+  const existingPersonId = String(formData.get("personId") ?? "");
+  const typedName = String(formData.get("personName") ?? "").trim();
+
+  const draft: ReviewDraft = {
+    personId: existingPersonId || null,
+    personName: typedName,
+    relationship: String(formData.get("relationship") ?? "").trim() || null,
+    title: String(formData.get("title") ?? "").trim(),
+    date: String(formData.get("date") ?? ""),
+    recurring: formData.get("recurring") === "on",
+    kind: (String(formData.get("kind") ?? "OTHER") as EventKind) ?? "OTHER",
+    details: String(formData.get("details") ?? "")
+      .split("\n")
+      .map((d) => d.trim())
+      .filter(Boolean),
+    notes: [],
+    reminderOffsets: String(formData.get("offsets") ?? "")
+      .split(",")
+      .map((n) => Number(n.trim()))
+      .filter((n) => Number.isFinite(n)),
+  };
+
+  if (!draft.personName && existingPersonId) {
+    const person = await prisma.person.findFirst({ where: { id: existingPersonId, userId: user.id } });
+    draft.personName = person?.name ?? "";
+  }
+  if (draft.reminderOffsets.length === 0) draft.reminderOffsets = user.reminderOffsetsDefault;
+
+  const saved = await saveReviewedEvent(draft, "MANUAL");
+  if (saved.ok && saved.data) redirect(`/events/${saved.data.eventId}`);
 }

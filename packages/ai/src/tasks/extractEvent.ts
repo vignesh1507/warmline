@@ -36,7 +36,7 @@ Rules, in order of importance:
 6. "kind" is one of CELEBRATION, MILESTONE, CATCHUP, APOLOGY, CONDOLENCE, FAVOUR, OTHER.
 7. "confidence" is 0 to 1: how sure you are the whole record is right.
 
-Answer with JSON only, no prose, in this shape:
+Answer with one JSON object, never a list, and no text around it. This exact shape:
 {"person":{"name":"","relationship":null},"title":"","date":"YYYY-MM-DD or null","dateText":null,"recurring":false,"kind":"OTHER","details":[],"noteWorthy":[],"confidence":0.0,"missing":[],"followUpQuestion":null}`;
 
 export async function extractEvent(
@@ -59,7 +59,7 @@ export async function extractEvent(
     user,
     schema: extractedEvent,
     temperature: 0.1,
-    maxTokens: 700,
+    maxTokens: 2000,
   });
 
   return { ...result, data: tidy(result.data) };

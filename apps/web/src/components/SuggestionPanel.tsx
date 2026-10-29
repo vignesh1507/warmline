@@ -47,6 +47,7 @@ export function SuggestionPanel({
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const noteMap = new Map(notes.map((n) => [n.id, n]));
   const live = suggestions.filter((s) => s.status !== "DISMISSED");
@@ -58,14 +59,31 @@ export function SuggestionPanel({
   const rehearsal = byKind("REHEARSAL")[0];
   const draft = byKind("DRAFT")[0];
 
-  function run(label: string, fn: () => Promise<{ ok: boolean; error?: string }>) {
+  function run(
+    label: string,
+    fn: () => Promise<{ ok: boolean; error?: string; data?: { kept?: number; dropped?: number; found?: boolean } }>,
+  ) {
     setBusy(label);
     setMessage(null);
+    setNotice(null);
     startTransition(async () => {
       const result = await fn();
       setBusy(null);
-      if (!result.ok) setMessage(result.error ?? "That didn't work.");
-      else router.refresh();
+      if (!result.ok) {
+        setMessage(result.error ?? "That didn't work.");
+        return;
+      }
+      // Say out loud when something was thrown away for citing a note that
+      // doesn't exist. Silence would look identical to the model behaving.
+      const dropped = result.data?.dropped ?? 0;
+      if (dropped > 0) {
+        setNotice(
+          `${dropped} idea${dropped === 1 ? "" : "s"} dropped for citing notes that don't exist.`,
+        );
+      } else if (result.data?.found === false) {
+        setNotice("No older note was a genuine fit, so there's no echo this time.");
+      }
+      router.refresh();
     });
   }
 
@@ -104,11 +122,17 @@ export function SuggestionPanel({
         <IdeaBadge />
       </div>
 
+      {/* Gemma 4 reasons before it answers, and on AI Studio's free tier that is
+          genuinely slow. Saying so beats a spinner that looks broken. */}
+      {pending ? <p className="text-xs muted">Gemma usually takes 30 to 50 seconds for this.</p> : null}
+
       {message ? (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">
           {message}
         </p>
       ) : null}
+
+      {notice ? <p className="text-xs muted">{notice}</p> : null}
 
       {echo ? <EchoCard suggestion={echo} noteMap={noteMap} onDismiss={() => run("dismiss", async () => { await dismissSuggestion(echo.id); return { ok: true }; })} /> : null}
 
@@ -181,7 +205,7 @@ function Grounding({ suggestion, noteMap }: { suggestion: SuggestionView; noteMa
   return (
     <details className="mt-1.5">
       <summary className="cursor-pointer text-xs muted hover:text-ember">
-        Based on {cited.length} of your note{cited.length === 1 ? "" : "s"}
+        Based on {cited.length} note{cited.length === 1 ? "" : "s"} you wrote
       </summary>
       <ul className="mt-1.5 space-y-1 border-l-2 border-[var(--line)] pl-2">
         {cited.map((note) => (

@@ -2,11 +2,13 @@ import Link from "next/link";
 import { formatDay } from "@warmline/shared";
 import { Nav } from "@/components/Nav";
 import { ChatComposer } from "@/components/ChatComposer";
+import { ManualEventForm } from "@/components/ManualEventForm";
 import { Agenda, CoolingOff, DueReminders, OpenLoops } from "@/components/HomeLists";
 import { FollowUpForm } from "@/components/FollowUpForm";
 import { Card, SectionTitle } from "@/components/ui";
 import { rollRecurringEvents } from "@/lib/actions/events";
 import { getHomeData } from "@/lib/queries";
+import { prisma } from "@warmline/db";
 import { requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +18,11 @@ export default async function HomePage() {
   // Birthdays roll themselves forward; no cron, no stale agenda.
   await rollRecurringEvents(user.id);
   const home = await getHomeData(user.id);
+  const people = await prisma.person.findMany({
+    where: { userId: user.id },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
 
   return (
     <>
@@ -24,6 +31,8 @@ export default async function HomePage() {
         <DueReminders reminders={home.dueReminders} />
 
         <ChatComposer />
+
+        <ManualEventForm people={people} defaultOffsets={user.reminderOffsetsDefault} />
 
         {home.pendingInbox > 0 ? (
           <Link

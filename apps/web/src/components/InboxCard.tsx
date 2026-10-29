@@ -111,7 +111,8 @@ export function InboxCard({ item }: { item: InboxView }) {
 
       {dateText && !date ? (
         <p className="mt-2 text-xs muted">
-          They said &ldquo;{String(dateText)}&rdquo; — pick a date to accept this.
+          They said &ldquo;{String(dateText)}&rdquo; —{" "}
+          {isEvent ? "pick a date to accept this." : "add a date if you want a nudge, or leave it blank."}
         </p>
       ) : null}
 

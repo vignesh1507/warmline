@@ -28,7 +28,7 @@ Rules, in order of importance:
 6. "draft" is a message the user could send, in their own plain voice, 2 to 4 sentences, no placeholders like [name] unless the information is genuinely missing.
 7. Suggest nothing that spends large sums, promises on the user's behalf, or assumes the user's budget.
 
-Answer with JSON only, in this shape:
+Answer with one JSON object, never a list, and no text around it. This exact shape:
 {"gifts":[{"text":"","groundedOn":["noteId"],"assumption":null}],"checklist":[{"text":"","groundedOn":[],"assumption":"general suggestion"}],"topics":[{"text":"","groundedOn":[],"assumption":null}],"draft":{"text":"","groundedOn":[]},"questions":[]}`;
 
 export async function suggestPrep(
@@ -60,6 +60,6 @@ export async function suggestPrep(
     user,
     schema: prepSuggestions,
     temperature: 0.6,
-    maxTokens: 1500,
+    maxTokens: 4000,
   });
 }

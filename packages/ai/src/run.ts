@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import { extractJson, JsonParseError } from "./json";
+import { extractJsonCandidates } from "./json";
 import { AiError, type GemmaProvider } from "./provider";
 
 export type TaskSpec<T> = {
@@ -49,20 +49,29 @@ export async function runTask<T>(provider: GemmaProvider, spec: TaskSpec<T>): Pr
     }
     lastRaw = raw;
 
-    let parsed: unknown;
-    try {
-      parsed = extractJson(raw);
-    } catch (err) {
-      lastProblem = err instanceof JsonParseError ? "it was not valid JSON" : String(err);
+    // A thinking model leaves several JSON-shaped things in its reply, including
+    // the empty template it was given. The schema decides which one is the answer.
+    const candidates = extractJsonCandidates(raw);
+    if (candidates.length === 0) {
+      lastProblem = "it contained no JSON";
       continue;
     }
 
-    const result = spec.schema.safeParse(parsed);
-    if (result.success) return { data: result.data, model: provider.model, attempts: attempt };
-    lastProblem = result.error.issues
-      .slice(0, 6)
-      .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
-      .join("; ");
+    let problem = "";
+    for (const candidate of candidates) {
+      // Models also wrap the answer: `[ {...} ]`, or `{"result": {...}}`.
+      for (const shape of [candidate, ...unwrapCandidates(candidate)]) {
+        const result = spec.schema.safeParse(shape);
+        if (result.success) return { data: result.data, model: provider.model, attempts: attempt };
+        if (!problem) {
+          problem = result.error.issues
+            .slice(0, 6)
+            .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+            .join("; ");
+        }
+      }
+    }
+    lastProblem = problem;
   }
 
   throw new AiTaskError(
@@ -70,4 +79,25 @@ export async function runTask<T>(provider: GemmaProvider, spec: TaskSpec<T>): Pr
     spec.name,
     lastRaw,
   );
+}
+
+/** Shapes a model wraps its answer in, unwrapped once, cheapest first. */
+function unwrapCandidates(parsed: unknown): unknown[] {
+  const out: unknown[] = [];
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 1) out.push(parsed[0]);
+    // `[{gifts: [...]}, {checklist: [...]}]` — one object split across entries.
+    if (parsed.length > 1 && parsed.every((item) => item && typeof item === "object" && !Array.isArray(item))) {
+      out.push(Object.assign({}, ...(parsed as object[])));
+    }
+    return out;
+  }
+  if (parsed && typeof parsed === "object") {
+    const entries = Object.entries(parsed as Record<string, unknown>);
+    // `{"result": {...}}` / `{"response": {...}}`
+    if (entries.length === 1 && entries[0]![1] && typeof entries[0]![1] === "object") {
+      out.push(entries[0]![1]);
+    }
+  }
+  return out;
 }

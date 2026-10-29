@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { citedNoteIds, groundItems } from "./grounding";
+import { citedNoteIds, groundItems, UNSUPPORTED } from "./grounding";
 
 const NOTES = ["note-1", "note-2"];
 
@@ -27,13 +27,15 @@ describe("groundItems", () => {
     expect(kept[0]?.groundedOn).toEqual(["note-1"]);
   });
 
-  it("allows an honest guess, but not a silent one", () => {
+  it("keeps a guess, and labels it as one", () => {
     const honest = groundItems([{ text: "A nice card", groundedOn: [], assumption: "general idea" }], NOTES);
-    expect(honest.kept).toHaveLength(1);
+    expect(honest.kept[0]?.assumption).toBe("general idea");
 
+    // An idea citing nothing is a guess, not a lie \u2014 keep it, but mark it, so the
+    // user still gets ideas without any of them posing as something they wrote.
     const silent = groundItems([{ text: "A nice card", groundedOn: [] }], NOTES);
-    expect(silent.kept).toHaveLength(0);
-    expect(silent.dropped[0]?.reason).toBe("no note cited and no assumption stated");
+    expect(silent.kept).toHaveLength(1);
+    expect(silent.kept[0]?.assumption).toBe(UNSUPPORTED);
   });
 
   it("drops empty text", () => {

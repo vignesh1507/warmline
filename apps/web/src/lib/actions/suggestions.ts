@@ -95,11 +95,21 @@ export async function generatePrep(eventId: string): Promise<ActionResult<{ kept
       });
     }
 
+    if (rows.length === 0) {
+      return {
+        ok: false,
+        error:
+          dropped > 0
+            ? `Gemma's ${dropped} idea${dropped === 1 ? "" : "s"} all cited notes that don't exist, so none are shown. Try again.`
+            : "Gemma didn't return anything usable this time. Try again.",
+      };
+    }
+
     // Replace only the untouched ones: anything the user kept or dismissed stays.
     await prisma.suggestion.deleteMany({
       where: { eventId: event.id, kind: { in: PREP_KINDS }, status: "NEW" },
     });
-    if (rows.length) await prisma.suggestion.createMany({ data: rows });
+    await prisma.suggestion.createMany({ data: rows });
 
     revalidatePath(`/events/${eventId}`);
     return { ok: true, data: { kept: rows.length, dropped } };

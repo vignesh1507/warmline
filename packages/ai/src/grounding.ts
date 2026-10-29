@@ -1,10 +1,16 @@
 /**
  * Suggestions must be traceable to something the user actually wrote.
  *
- * An idea may either cite notes (`groundedOn`, ids that must resolve) or own up to
- * being a guess (`assumption`). Anything that cites notes which don't exist is a
- * fabricated memory, and gets dropped here before it can reach a screen.
+ * The thing worth preventing is a *fabricated memory*: an idea that claims the
+ * authority of the user's notes while citing something that was never written.
+ * Those are dropped here, before they can reach a screen.
+ *
+ * An idea that cites nothing is a different matter — it is just a guess, and a
+ * guess is useful as long as it is labelled. Those are kept and marked, rather
+ * than thrown away, so the user is not left with an empty page.
  */
+
+export const UNSUPPORTED = "not based on your notes";
 
 export type Groundable = {
   text: string;
@@ -35,12 +41,9 @@ export function groundItems<T extends Groundable>(items: T[], validNoteIds: Iter
       dropped.push({ item, reason: "cited notes that do not exist" });
       continue;
     }
-    if (cited.length === 0 && !item.assumption) {
-      // Neither grounded nor honest about being a guess.
-      dropped.push({ item, reason: "no note cited and no assumption stated" });
-      continue;
-    }
-    kept.push({ ...item, text, groundedOn: resolved });
+    // Cites nothing: keep it, but never let it pass as something the user said.
+    const assumption = cited.length === 0 ? (item.assumption ?? UNSUPPORTED) : item.assumption;
+    kept.push({ ...item, text, groundedOn: resolved, assumption });
   }
   return { kept, dropped };
 }

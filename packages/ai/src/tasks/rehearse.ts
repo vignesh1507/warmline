@@ -24,7 +24,7 @@ Rules, in order of importance:
 5. No therapy-speak, no scripts that manipulate, no diagnosis, and no medical, legal or clinical advice. If the situation sounds like a crisis, say plainly in "reminder" that a short, human, non-advising message is usually better than a prepared one.
 6. Keep it short. This is a nudge before a conversation, not a manual.
 
-Answer with JSON only, in this shape:
+Answer with one JSON object, never a list, and no text around it. This exact shape:
 {"feelings":[""],"openers":[{"text":"","groundedOn":[],"assumption":null}],"avoid":[""],"reminder":""}`;
 
 export async function rehearse(
@@ -56,6 +56,6 @@ export async function rehearse(
     user,
     schema: rehearsal,
     temperature: 0.5,
-    maxTokens: 900,
+    maxTokens: 2500,
   });
 }

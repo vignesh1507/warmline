@@ -25,7 +25,8 @@ export function aiConfigFromEnv(env: Record<string, string | undefined> = proces
     model: env.AI_MODEL || DEFAULT_MODELS[provider],
     apiKey: env.AI_API_KEY,
     baseUrl: env.OLLAMA_URL || "http://127.0.0.1:11434",
-    timeoutMs: Number(env.AI_TIMEOUT_MS || 45_000),
+    // Gemma 4 reasons before it answers: 30-50s for a suggestion is normal.
+    timeoutMs: Number(env.AI_TIMEOUT_MS || 90_000),
   };
 }
 
