@@ -4,6 +4,7 @@ import { prisma, SINGLE_USER_ID, type Prisma } from "@warmline/db";
 import { stableHash, truncate } from "@warmline/shared";
 import { bridgeAuthorized, unauthorized } from "@/lib/bridge-auth";
 import { aiReady, gemma } from "@/lib/ai";
+import { acceptInboxItem } from "@/lib/actions/inbox";
 
 const MAX_MESSAGES = 40;
 const MAX_TEXT = 2000;
@@ -31,17 +32,35 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "chatId and messages are required" }, { status: 400 });
   }
 
-  // Consent check, server side: a chat the user has not ticked is ignored even
-  // if the bridge sends it.
-  const chat = await prisma.whatsappChat.findUnique({
-    where: { userId_chatId: { userId: SINGLE_USER_ID, chatId: body.chatId } },
-  });
-  if (!chat || !chat.monitored) {
-    return Response.json({ ok: true, skipped: "not monitored", created: 0 });
-  }
-
   const user = await prisma.user.findUnique({ where: { id: SINGLE_USER_ID } });
   if (!user) return Response.json({ ok: false, error: "no user" }, { status: 400 });
+
+  // Consent check, server side. With "watch every chat" on, a chat the bridge
+  // has not seen before is registered and watched straight away; otherwise an
+  // unticked chat is ignored even if the bridge sends it.
+  let chat = await prisma.whatsappChat.findUnique({
+    where: { userId_chatId: { userId: SINGLE_USER_ID, chatId: body.chatId } },
+  });
+
+  if (user.monitorAllChats) {
+    chat = await prisma.whatsappChat.upsert({
+      where: { userId_chatId: { userId: SINGLE_USER_ID, chatId: body.chatId } },
+      update: { monitored: true, consentAt: chat?.consentAt ?? new Date() },
+      create: {
+        userId: SINGLE_USER_ID,
+        chatId: body.chatId,
+        name: (body.chatName ?? body.chatId).slice(0, 120),
+        isGroup: Boolean(body.isGroup),
+        monitored: true,
+        consentAt: new Date(),
+      },
+    });
+  }
+
+  if (!chat || !chat.monitored) {
+    console.log(`[bridge] ${body.chatId}: not watched, ${body.messages.length} message(s) ignored`);
+    return Response.json({ ok: true, skipped: "not monitored", created: 0 });
+  }
 
   const lastMessageAt = body.messages.reduce<Date | null>((latest, m) => {
     const at = m.at ? new Date(m.at) : null;
@@ -130,10 +149,40 @@ export async function POST(request: Request) {
       });
     }
 
-    if (rows.length) {
+    console.log(
+      `[bridge] ${chat.name}: ${messages.length} message(s) -> ${data.events.length} event(s), ${data.loops.length} loop(s), ${rows.length} worth proposing`,
+    );
+    if (data.events.length + data.loops.length > rows.length) {
+      console.log(
+        `[bridge] filtered out:`,
+        [...data.events, ...data.loops]
+          .filter((s) => !worthProposing(s))
+          .map((s) => `confidence=${s.confidence} quote=${JSON.stringify(s.quote.slice(0, 40))}`),
+      );
+    }
+    if (rows.length && user.autoAcceptEvents) {
+      // The user asked for these to be filed without review. They still go
+      // through InboxItem first, so the record of where each one came from
+      // survives, and so a duplicate is still only saved once.
+      const inserted = await prisma.inboxItem.createMany({ data: rows, skipDuplicates: true });
+      created = inserted.count;
+      if (created > 0) {
+        const pending = await prisma.inboxItem.findMany({
+          where: { userId: SINGLE_USER_ID, status: "PENDING", msgHash: { in: rows.map((r) => r.msgHash) } },
+        });
+        for (const item of pending) {
+          const result = await acceptInboxItem(item.id);
+          if (!result.ok) console.log(`[bridge] could not file "${item.id}" automatically: ${result.error}`);
+        }
+        console.log(`[bridge] filed ${pending.length} item(s) automatically, by person`);
+      }
+    } else if (rows.length) {
       // skipDuplicates handles the same promise being seen in two polls.
       const result = await prisma.inboxItem.createMany({ data: rows, skipDuplicates: true });
       created = result.count;
+      if (created < rows.length) {
+        console.log(`[bridge] ${rows.length - created} already seen (same message proposed before)`);
+      }
     }
   } catch (err) {
     return Response.json(

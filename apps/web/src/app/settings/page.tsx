@@ -89,6 +89,37 @@ export default async function SettingsPage() {
                   </span>
                 </span>
               </label>
+              <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                <input
+                  type="checkbox"
+                  name="monitorAllChats"
+                  defaultChecked={user.monitorAllChats}
+                  className="mt-0.5 size-4 accent-[var(--color-ember)]"
+                />
+                <span>
+                  Watch every chat
+                  <span className="block text-xs muted">
+                    Reads every conversation on this account, including new ones, without ticking them
+                    individually. The people in those chats have not agreed to this — it is on you to
+                    decide that is fine.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                <input
+                  type="checkbox"
+                  name="autoAcceptEvents"
+                  defaultChecked={user.autoAcceptEvents}
+                  className="mt-0.5 size-4 accent-[var(--color-ember)]"
+                />
+                <span>
+                  File events automatically, by person
+                  <span className="block text-xs muted">
+                    Skips the Inbox: anything found is saved straight away under the person&apos;s name.
+                    Quicker, but a misread message becomes real data without you seeing it first.
+                  </span>
+                </span>
+              </label>
               <div className="sm:col-span-2">
                 <Button type="submit" size="sm">
                   Save settings

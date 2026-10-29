@@ -6,6 +6,8 @@ export type BridgeMsg = { id: string; isMe: boolean; text: string; at: string };
 export type BridgeStatus = "DISCONNECTED" | "QR_PENDING" | "AUTHENTICATING" | "CONNECTED" | "ERROR";
 
 export type RemoteConfig = {
+  /** When true the user has asked for every chat to be watched. */
+  monitorAll: boolean;
   monitoredChatIds: string[];
   monitoredChats: { chatId: string; name: string }[];
   storeSnippets: boolean;

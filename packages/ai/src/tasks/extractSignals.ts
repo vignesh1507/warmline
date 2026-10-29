@@ -37,9 +37,22 @@ export const signalLoop = z.object({
   confidence,
 });
 
+/**
+ * One malformed item should not cost the user the whole batch. A strict
+ * z.array fails entirely if any element is wrong, which in practice meant a
+ * real event being thrown away because the model fumbled a second one. This
+ * keeps every element that validates and silently drops the rest.
+ */
+function tolerantArray<T extends z.ZodTypeAny>(item: T) {
+  return z.preprocess(
+    (value) => (Array.isArray(value) ? value.filter((element) => item.safeParse(element).success) : []),
+    z.array(item),
+  );
+}
+
 export const extractedSignals = z.object({
-  events: z.array(signalEvent).default([]),
-  loops: z.array(signalLoop).default([]),
+  events: tolerantArray(signalEvent).default([]),
+  loops: tolerantArray(signalLoop).default([]),
 });
 
 export type SignalEvent = z.infer<typeof signalEvent>;

@@ -44,7 +44,7 @@ export class WhatsappSource implements MessageSource {
     const client = new Client({
       authStrategy: new LocalAuth({ dataPath: this.cfg.sessionDir }),
       puppeteer: {
-        headless: true,
+        headless: this.cfg.headless,
         executablePath,
         args: chromeArgs(this.cfg.noSandbox),
       },
@@ -131,6 +131,44 @@ export class WhatsappSource implements MessageSource {
     await this.pushChats();
   }
 
+
+  /**
+   * Which chat a message belongs to.
+   *
+   * getChat() reaches into WhatsApp Web's own store, which breaks whenever they
+   * ship a change their library hasn't caught up with — it fails with a minified
+   * one-letter error. The message itself already carries everything needed, so
+   * that is the fallback, and it keeps working when the store call does not.
+   */
+  private async describeChat(message: {
+    fromMe?: boolean;
+    from?: string;
+    to?: string;
+    _data?: { notifyName?: string };
+    getChat: () => Promise<{ id: { _serialized: string }; name?: string; isGroup?: boolean }>;
+  }): Promise<ChatInfo | null> {
+    try {
+      const chat = await message.getChat();
+      if (chat?.id?._serialized) {
+        return {
+          chatId: chat.id._serialized,
+          name: chat.name || chat.id._serialized.split("@")[0] || "Unknown",
+          isGroup: Boolean(chat.isGroup),
+        };
+      }
+    } catch {
+      /* fall through to the message's own fields */
+    }
+
+    const chatId = (message.fromMe ? message.to : message.from) ?? "";
+    if (!chatId) return null;
+    const isGroup = chatId.endsWith("@g.us");
+    // notifyName is the other person's WhatsApp display name; for a chat you
+    // started, fall back to the number so the entry is still recognisable.
+    const name = (!isGroup && message._data?.notifyName) || chatId.split("@")[0] || "Unknown";
+    return { chatId, name, isGroup };
+  }
+
   private async handleMessage(message: {
     id?: { _serialized?: string };
     body?: string;
@@ -138,6 +176,9 @@ export class WhatsappSource implements MessageSource {
     hasMedia?: boolean;
     fromMe?: boolean;
     timestamp?: number;
+    from?: string;
+    to?: string;
+    _data?: { notifyName?: string };
     getChat: () => Promise<{ id: { _serialized: string }; name?: string; isGroup?: boolean }>;
   }): Promise<void> {
     if (!this.handlers) return;
@@ -146,27 +187,20 @@ export class WhatsappSource implements MessageSource {
     const text = (message.body ?? "").trim();
     if (!text) return;
 
-    try {
-      const chat = await message.getChat();
-      const chatId = chat.id._serialized;
-      if (chatId === "status@broadcast") return;
-      // Consent gate, on this side too: an unticked chat is never even buffered.
-      if (!this.monitored.has(chatId)) return;
+    const info = await this.describeChat(message);
+    if (!info || info.chatId === "status@broadcast") return;
 
-      const info: ChatInfo = {
-        chatId,
-        name: chat.name || "Unknown",
-        isGroup: Boolean(chat.isGroup),
-      };
-      const msg: BridgeMsg = {
-        id: message.id?._serialized ?? `${chatId}-${message.timestamp ?? Date.now()}`,
-        isMe: Boolean(message.fromMe),
-        text,
-        at: new Date((message.timestamp ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(),
-      };
-      this.handlers.onMessage(info, msg);
-    } catch (err) {
-      log.warn("could not read a message's chat:", (err as Error).message);
-    }
+    // Offer the chat so it can be ticked in Settings. Names and ids only.
+    this.handlers.onChats([info]);
+
+    // Consent gate, on this side too: an unticked chat is never even buffered.
+    if (!this.monitored.has(info.chatId)) return;
+
+    this.handlers.onMessage(info, {
+      id: message.id?._serialized ?? `${info.chatId}-${message.timestamp ?? Date.now()}`,
+      isMe: Boolean(message.fromMe),
+      text,
+      at: new Date((message.timestamp ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+    });
   }
 }

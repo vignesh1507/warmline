@@ -17,6 +17,8 @@ export async function updateSettings(formData: FormData): Promise<void> {
       reminderOffsetsDefault: offsets.length ? [...new Set(offsets)].sort((a, b) => b - a) : user.reminderOffsetsDefault,
       defaultCadenceDays: Number(formData.get("cadenceDays")) || user.defaultCadenceDays,
       storeSnippets: formData.get("storeSnippets") === "on",
+      monitorAllChats: formData.get("monitorAllChats") === "on",
+      autoAcceptEvents: formData.get("autoAcceptEvents") === "on",
     },
   });
   revalidatePath("/settings");

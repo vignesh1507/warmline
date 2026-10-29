@@ -29,6 +29,9 @@ async function main() {
 
   const buffers = new Map<string, Buffered>();
   let monitored = new Set<string>();
+  let monitorAll = false;
+
+  const watching = (chatId: string) => monitorAll || monitored.has(chatId);
 
   const source: MessageSource = cfg.fake ? new FakeSource() : new WhatsappSource(cfg);
 
@@ -40,7 +43,7 @@ async function main() {
       void api.offerChats(chats).catch((err) => log.warn("could not offer chats:", err.message));
     },
     onMessage: (chat, message) => {
-      if (!monitored.has(chat.chatId)) return;
+      if (!watching(chat.chatId)) return;
       const entry = buffers.get(chat.chatId) ?? { chat, messages: [] };
       entry.chat = chat;
       entry.messages.push(message);
@@ -56,6 +59,8 @@ async function main() {
   async function refreshPermission() {
     const remote = await api.getConfig();
     if (!remote) return;
+    const wasMonitorAll = monitorAll;
+    monitorAll = Boolean(remote.monitorAll);
     const next = new Set(remote.monitoredChatIds);
     const changed =
       next.size !== monitored.size || [...next].some((id) => !monitored.has(id));
@@ -63,9 +68,11 @@ async function main() {
 
     // Anything no longer permitted is dropped from memory immediately.
     for (const chatId of [...buffers.keys()]) {
-      if (!monitored.has(chatId)) buffers.delete(chatId);
+      if (!watching(chatId)) buffers.delete(chatId);
     }
-    if (changed) {
+    if (monitorAll !== wasMonitorAll) {
+      log.info(monitorAll ? "watching every chat, as you asked" : "back to watching only the chats you ticked");
+    } else if (changed && !monitorAll) {
       log.info(
         monitored.size === 0
           ? "no chats are being watched"
@@ -77,7 +84,7 @@ async function main() {
 
   async function flush() {
     for (const [chatId, entry] of [...buffers.entries()]) {
-      if (!monitored.has(chatId) || entry.messages.length === 0) continue;
+      if (!watching(chatId) || entry.messages.length === 0) continue;
       const messages = entry.messages.splice(0, entry.messages.length);
       const result = await api.handOverMessages(entry.chat, messages);
       if (result && result.created > 0) {

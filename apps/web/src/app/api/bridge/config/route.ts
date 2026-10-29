@@ -9,7 +9,10 @@ export async function GET(request: Request) {
   if (!bridgeAuthorized(request)) return unauthorized();
 
   const [user, chats] = await Promise.all([
-    prisma.user.findUnique({ where: { id: SINGLE_USER_ID }, select: { storeSnippets: true } }),
+    prisma.user.findUnique({
+      where: { id: SINGLE_USER_ID },
+      select: { storeSnippets: true, monitorAllChats: true },
+    }),
     prisma.whatsappChat.findMany({
       where: { userId: SINGLE_USER_ID, monitored: true },
       select: { chatId: true, name: true },
@@ -18,10 +21,12 @@ export async function GET(request: Request) {
 
   return Response.json({
     ok: true,
+    // With monitorAll on, the list below is advisory: the bridge watches every
+    // chat it sees, including ones that appear later.
+    monitorAll: user?.monitorAllChats ?? false,
     monitoredChatIds: chats.map((c) => c.chatId),
     monitoredChats: chats,
     storeSnippets: user?.storeSnippets ?? false,
-    // Nothing is read from a chat that is not in the list above.
     pollSeconds: 15,
   });
 }

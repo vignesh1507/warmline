@@ -156,3 +156,33 @@ describe("wrapped answers", () => {
     expect(data.title).toBe("Call Sam");
   });
 });
+
+describe("signal batches", () => {
+  it("keeps the good item when another in the batch is malformed", async () => {
+    const { extractSignals } = await import("./extractSignals");
+    const reply = JSON.stringify({
+      events: [
+        { personName: "", title: "", quote: "", confidence: 0.1 },
+        {
+          personName: "Barathi sir",
+          title: "viva",
+          date: "2026-10-30",
+          dateText: "tomorrow",
+          recurring: false,
+          kind: "OTHER",
+          details: [],
+          quote: "we have a viva tomorrow with barathi sir",
+          confidence: 1,
+        },
+      ],
+      loops: [],
+    });
+    const { data } = await extractSignals(provider(reply), {
+      chatName: "Dinesh",
+      messages: [{ id: "m1", isMe: true, text: "we have a viva tomorrow", at: TODAY }],
+      today: TODAY,
+    });
+    expect(data.events).toHaveLength(1);
+    expect(data.events[0]!.personName).toBe("Barathi sir");
+  });
+});

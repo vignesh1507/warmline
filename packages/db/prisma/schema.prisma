@@ -27,6 +27,14 @@ model User {
   aiModel                String   @default("gemma-4-31b-it")
   // Off by default: the bridge keeps a short quote only if the user turns this on.
   storeSnippets          Boolean  @default(false)
+  /// Watch every WhatsApp chat, including ones that appear later, instead of
+  /// ticking them one by one. Off by default: the people in those chats did not
+  /// agree to be read, so this has to be a deliberate choice.
+  monitorAllChats        Boolean  @default(false)
+  /// Save what the bridge finds straight into events and loops, skipping the
+  /// inbox review. Off by default, because review is what keeps a wrong
+  /// reading out of your data.
+  autoAcceptEvents       Boolean  @default(false)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
