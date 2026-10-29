@@ -1,0 +1,284 @@
+// Warmline data model.
+//
+// Everything here is personal information about the user and the people they care
+// about. Three rules shaped this schema:
+//   1. Nothing arrives from WhatsApp directly — it lands in InboxItem and waits.
+//   2. Suggestions reference the notes they were grounded in, by id.
+//   3. Every row hangs off a User, so export and wipe are single queries.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Prisma 7 takes the connection URL from prisma.config.ts for CLI work, and from
+// the driver adapter at runtime (see src/client.ts) — not from this block.
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                     String   @id @default(cuid())
+  // Single-user MVP: this row exists so multi-user later is a migration, not a rewrite.
+  label                  String   @default("me")
+  reminderOffsetsDefault Int[]    @default([7, 1])
+  defaultCadenceDays     Int      @default(30)
+  aiProvider             String   @default("aistudio")
+  aiModel                String   @default("gemma-4-31b-it")
+  // Off by default: the bridge keeps a short quote only if the user turns this on.
+  storeSnippets          Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  people        Person[]
+  events        Event[]
+  notes         Note[]
+  openLoops     OpenLoop[]
+  inboxItems    InboxItem[]
+  whatsappChats WhatsappChat[]
+}
+
+model Person {
+  id            String    @id @default(cuid())
+  userId        String
+  name          String
+  aliases       String[]  @default([])
+  relationship  String?
+  // Half-life for the warmth meter: how often you'd like to be in touch.
+  cadenceDays   Int       @default(30)
+  lastContactAt DateTime?
+  whatsappChatId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events    Event[]
+  notes     Note[]
+  openLoops OpenLoop[]
+
+  @@index([userId])
+  @@index([userId, name])
+}
+
+enum EventKind {
+  CELEBRATION
+  MILESTONE
+  CATCHUP
+  APOLOGY
+  CONDOLENCE
+  FAVOUR
+  OTHER
+}
+
+enum Source {
+  MANUAL
+  CHAT
+  WHATSAPP
+}
+
+model Event {
+  id        String    @id @default(cuid())
+  userId    String
+  personId  String
+  title     String
+  date      DateTime
+  recurring Boolean   @default(false)
+  kind      EventKind @default(OTHER)
+  // Details the user shared when adding: "she likes gardening", "dinner at 8".
+  details   String[]  @default([])
+  source    Source    @default(MANUAL)
+  // Set once the user has answered "how did it go?" so we stop asking.
+  followedUpAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person      Person       @relation(fields: [personId], references: [id], onDelete: Cascade)
+  notes       Note[]
+  suggestions Suggestion[]
+  reminders   Reminder[]
+
+  @@index([userId, date])
+  @@index([personId])
+}
+
+enum NoteKind {
+  PREFERENCE
+  MEMORY
+  POST_EVENT
+  IDEA
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  personId  String
+  eventId   String?
+  body      String
+  kind      NoteKind @default(MEMORY)
+  source    Source   @default(MANUAL)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  event  Event? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([personId, createdAt])
+  @@index([eventId])
+}
+
+enum SuggestionKind {
+  GIFT
+  CHECKLIST
+  TOPIC
+  DRAFT
+  ECHO
+  REHEARSAL
+  /// What to ask the user, when their notes are too thin for honest suggestions.
+  QUESTION
+}
+
+enum SuggestionStatus {
+  NEW
+  KEPT
+  DISMISSED
+}
+
+model Suggestion {
+  id       String           @id @default(cuid())
+  eventId  String
+  kind     SuggestionKind
+  // Shape depends on kind; always validated against a zod schema before it is stored.
+  content  Json
+  // Ids of the notes this was built from. Validated to exist before display:
+  // a suggestion that cannot name its source is not shown.
+  groundedNoteIds String[] @default([])
+  assumptions     String[] @default([])
+  status   SuggestionStatus @default(NEW)
+  model    String
+  createdAt DateTime        @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, kind, status])
+}
+
+model Reminder {
+  id          String    @id @default(cuid())
+  eventId     String
+  offsetDays  Int
+  dueAt       DateTime
+  readAt      DateTime?
+  dismissedAt DateTime?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, offsetDays])
+  @@index([dueAt])
+}
+
+enum LoopDirection {
+  I_OWE
+  THEY_OWE
+}
+
+enum LoopStatus {
+  OPEN
+  DONE
+  DROPPED
+}
+
+/// A promise either side made in passing. The point of the app that a calendar misses.
+model OpenLoop {
+  id            String        @id @default(cuid())
+  userId        String
+  personId      String
+  text          String
+  direction     LoopDirection
+  dueAt         DateTime?
+  status        LoopStatus    @default(OPEN)
+  /// Verbatim fragment the loop came from, so the user can judge it. Null unless
+  /// snippet storage is on, or the loop was typed by hand.
+  quote         String?
+  sourceMsgHash String?
+  nudgeAfterDays Int          @default(7)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  closedAt      DateTime?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+/// A WhatsApp chat the bridge has seen. `monitored` is false until the user says otherwise.
+model WhatsappChat {
+  id        String    @id @default(cuid())
+  userId    String
+  chatId    String
+  name      String
+  isGroup   Boolean   @default(false)
+  monitored Boolean   @default(false)
+  consentAt DateTime?
+  lastMessageAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chatId])
+  @@index([userId, monitored])
+}
+
+enum InboxType {
+  EVENT
+  OPEN_LOOP
+  CONTACT_PING
+}
+
+enum InboxStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+/// The holding pen. Everything the bridge proposes waits here for a tap.
+model InboxItem {
+  id        String      @id @default(cuid())
+  userId    String
+  type      InboxType
+  payload   Json
+  /// Short verbatim quote, only when the user enabled snippet storage.
+  snippet   String?
+  chatName  String?
+  msgHash   String
+  status    InboxStatus @default(PENDING)
+  createdAt DateTime    @default(now())
+  decidedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, msgHash])
+  @@index([userId, status, createdAt])
+}
+
+enum BridgeStatus {
+  DISCONNECTED
+  QR_PENDING
+  AUTHENTICATING
+  CONNECTED
+  ERROR
+}
+
+/// Single row describing the WhatsApp link, so Settings can render the QR and state.
+model BridgeState {
+  id         String       @id @default("singleton")
+  status     BridgeStatus @default(DISCONNECTED)
+  qrDataUrl  String?
+  phoneHint  String?
+  lastSeenAt DateTime?
+  lastError  String?
+  fake       Boolean      @default(false)
+  updatedAt  DateTime     @updatedAt
+}

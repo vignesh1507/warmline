@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/*
+  Warmline's palette. The name is the idea: a line you keep warm. Paper-warm
+  surfaces, ember accents, and three warmth bands that have to stay legible in
+  both themes because they carry meaning, not decoration.
+*/
+@theme {
+  --color-paper: #fbf7f2;
+  --color-paper-2: #ffffff;
+  --color-ink: #1c1917;
+  --color-ink-soft: #57534e;
+  --color-line: #e7e0d6;
+
+  --color-ember: #d9542b;
+  --color-ember-soft: #fdeee7;
+  --color-amber: #e0963c;
+
+  --color-warm: #d9542b;
+  --color-cooling: #b08326;
+  --color-cold: #5b7a8c;
+
+  --radius-card: 1rem;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+@layer base {
+  :root {
+    --paper: var(--color-paper);
+    --paper-2: var(--color-paper-2);
+    --ink: var(--color-ink);
+    --ink-soft: var(--color-ink-soft);
+    --line: var(--color-line);
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #16130f;
+      --paper-2: #211c17;
+      --ink: #f5f0e9;
+      --ink-soft: #b8ada0;
+      --line: #342c24;
+      color-scheme: dark;
+    }
+  }
+
+  html,
+  body {
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-ember) 25%, transparent);
+  }
+}
+
+@utility card {
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+}
+
+@utility muted {
+  color: var(--ink-soft);
+}

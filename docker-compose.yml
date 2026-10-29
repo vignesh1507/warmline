@@ -1,0 +1,24 @@
+# Local Postgres for development. Production uses DigitalOcean Managed Postgres —
+# see DEPLOY.md. Port 5433 on purpose, so this never collides with a Postgres you
+# already run on 5432.
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: warmline-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: warmline
+      POSTGRES_PASSWORD: warmline
+      POSTGRES_DB: warmline
+    ports:
+      - "5433:5432"
+    volumes:
+      - warmline-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U warmline -d warmline"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  warmline-pgdata:

@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+out/
+.env
+.env.local
+*.log
+.DS_Store
+.wa-session/
+.wa-cache/
+generated/
+coverage/

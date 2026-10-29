@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "warmline",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/vigneshskanda/Downloads/warmline && exec pnpm --filter @warmline/web dev"
+      ],
+      "port": 3100
+    }
+  ]
+}

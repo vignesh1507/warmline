@@ -1,0 +1,63 @@
+# Render blueprint for Warmline.
+#
+# The web app is the whole product; the bridge is optional and commented out
+# below, because most people are better off running it on their own machine
+# (see DEPLOY.md for the trade-off).
+
+services:
+  - type: web
+    name: warmline-web
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @warmline/db generate && pnpm --filter @warmline/web build
+    # Runs on its own before traffic switches over, so the schema is ready.
+    preDeployCommand: pnpm --filter @warmline/db deploy
+    startCommand: pnpm --filter @warmline/web start
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false # DigitalOcean connection string, keep ?sslmode=require
+      - key: APP_PASSCODE
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: BRIDGE_SHARED_SECRET
+        sync: false # must match the bridge's copy
+      - key: AI_PROVIDER
+        value: aistudio
+      - key: AI_MODEL
+        value: gemma-4-31b-it
+      - key: AI_API_KEY
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # Optional: run the WhatsApp bridge on Render instead of your own machine.
+  #
+  # It needs a paid plan: a disk (free instances have no persistent storage, so
+  # you would rescan the QR on every deploy) and enough memory for Chrome.
+  # Uncomment, then scan the QR from Warmline's Settings screen.
+  # ---------------------------------------------------------------------------
+  # - type: worker
+  #   name: warmline-bridge
+  #   runtime: docker
+  #   dockerfilePath: ./apps/bridge/Dockerfile
+  #   dockerContext: .
+  #   plan: standard
+  #   region: oregon
+  #   disk:
+  #     name: wa-session
+  #     mountPath: /data
+  #     sizeGB: 1
+  #   envVars:
+  #     - key: WEB_API_URL
+  #       fromService:
+  #         type: web
+  #         name: warmline-web
+  #         property: hostport
+  #     - key: BRIDGE_SHARED_SECRET
+  #       sync: false # the same value as the web service
+  #     - key: WA_FAKE
+  #       value: "0"

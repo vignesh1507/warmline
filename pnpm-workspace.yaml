@@ -1,0 +1,12 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Install scripts we deliberately allow. Prisma needs its engines, esbuild and
+# tsx their binaries, and Puppeteer downloads the Chromium that the WhatsApp
+# bridge drives. Explicit here so a laptop, CI and Docker all install alike.
+allowBuilds:
+  "@prisma/engines": true
+  prisma: true
+  esbuild: true
+  puppeteer: true
